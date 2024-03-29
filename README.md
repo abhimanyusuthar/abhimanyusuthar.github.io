@@ -1,19 +1,3 @@
-### Hi there 👋
-
-This is the source code for Ye Zheng's public homepage: https://zhengyeah.com/. 
-
-Feel free to clone this code for your personal usage.
-
-![](/images/screen-website.png)
-
-### Features
-
-This website is designed for personal academic homepage, with the following features:
-
-* Responsive design: different layouts on different screen sizes;
-* Well-designed layouts: elements' colors, sizes, margins, and paddings are fine-tuned;
-* Implemented by pure HTML+CSS+JSP, no dependence on frameworks;
-* Easy extensibility: simple and structural code template. 
 
 
 <!--
