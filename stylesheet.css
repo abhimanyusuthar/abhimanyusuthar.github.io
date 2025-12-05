@@ -133,3 +133,49 @@ h2 {
 span.highlight {
   background-color: #ffffd0;
 }
+
+/* Dark mode styles */
+@media (prefers-color-scheme: dark) {
+  body {
+    background-color: #1a1a1a;
+    color: #e0e0e0;
+  }
+  
+  a {
+    color: #58a6ff;
+  }
+  
+  a:focus,
+  a:hover {
+    color: #79c0ff;
+  }
+  
+  .name {
+    color: #ffffff;
+  }
+  
+  .papertitle {
+    color: #e0e0e0;
+  }
+  
+  body,
+  td,
+  th,
+  tr,
+  p {
+    color: #e0e0e0;
+  }
+  
+  h2 {
+    color: #ffffff;
+  }
+  
+  strong {
+    color: #e0e0e0;
+  }
+  
+  span.highlight {
+    background-color: #4a4a00;
+    color: #ffff80;
+  }
+}
