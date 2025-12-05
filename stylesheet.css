@@ -179,3 +179,8 @@ span.highlight {
     color: #ffff80;
   }
 }
+
+.one img[src*="IMG_2736"],
+.one video source[src*="IMG_2736"] {
+  filter: brightness(0.8);
+}
