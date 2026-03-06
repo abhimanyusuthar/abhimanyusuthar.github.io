@@ -304,6 +304,12 @@ a:hover, a:focus {
   object-fit: cover;
 }
 
+.project-media--contain img,
+.project-media--contain video {
+  object-fit: contain;
+  background-color: #000;
+}
+
 /* Reduce brightness on overly bright videos */
 .project-media video {
   filter: brightness(0.85);
