@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Vision-to-Action Policy on Unitree G1 — Abhimanyu Suthar</title>
+  <meta name="description" content="Distilling a privileged motion-imitation teacher into a vision-only student that controls a Unitree G1 humanoid from proprioception and a monocular video feed.">
+  <link rel="shortcut icon" href="../images/favicon/favicon.ico" type="image/x-icon">
+  <link rel="stylesheet" href="../stylesheet.css">
+</head>
+<body>
+
+  <nav class="top-nav">
+    <div class="top-nav-inner">
+      <a href="../index.html" class="nav-name">Abhimanyu Suthar</a>
+      <div class="nav-sections">
+        <a href="../index.html#experience">Experience</a>
+        <a href="../index.html#projects">Projects</a>
+      </div>
+    </div>
+  </nav>
+
+  <article class="writeup">
+
+    <a href="../index.html#projects" class="writeup-back">← back to projects</a>
+
+    <header class="writeup-header">
+      <h1 class="writeup-title">Vision-to-Action Policy on Unitree G1</h1>
+      <p class="writeup-subtitle">
+        Distilling a privileged motion-imitation teacher into a vision-only student
+        that controls a 23-DOF humanoid from proprioception and a monocular video
+        feed — no future motion references, no simulator state.
+      </p>
+
+      <div class="writeup-meta">
+        <span class="writeup-meta-item">2025 — in progress</span>
+        <span class="writeup-meta-dot">·</span>
+        <span class="writeup-meta-item">Distillation &nbsp;·&nbsp; DAgger &nbsp;·&nbsp; Vision-to-Action &nbsp;·&nbsp; Humanoid</span>
+        <span class="writeup-meta-dot">·</span>
+        <a class="writeup-meta-link" href="https://arxiv.org/abs/2510.02566">PhysHMR (inspiration)</a>
+      </div>
+    </header>
+
+    <figure class="writeup-hero">
+      <video autoplay loop muted playsinline>
+        <source src="../0110_mix.mp4" type="video/mp4">
+      </video>
+      <figcaption>The student policy controlling the G1 in simulation from the deployable observation.</figcaption>
+    </figure>
+
+    <section class="writeup-section">
+      <p class="writeup-lede">
+        A vision-only student policy for the Unitree G1, distilled from a
+        privileged motion-imitation teacher (TWIST). The student takes
+        proprioception plus a 512-dim feature extracted from a single video
+        frame and outputs 23 joint targets at 50 Hz. The teacher needs ground-truth
+        future motion to track. The student does not — which is the whole point.
+      </p>
+    </section>
+
+    <section class="writeup-section">
+      <h2>The problem</h2>
+      <p>
+        TWIST tracks reference motions beautifully in simulation. To do so it
+        reads <em>future</em> motion targets at every timestep — root pose, joint
+        positions, body keypoints, all looked up from the reference trajectory.
+        That works in sim, where you have the trajectory pre-loaded. On a real
+        robot, you don't have a ground-truth future to look up.
+      </p>
+      <p>
+        The question becomes: can the privileged motion references be replaced
+        with something a real robot can actually <em>observe</em>? If yes, the
+        policy becomes deployable.
+      </p>
+    </section>
+
+    <section class="writeup-section">
+      <h2>The idea — vision as a substitute for future references</h2>
+      <p>
+        PhysHMR proposes that monocular video of the demonstrated motion encodes
+        essentially the same intent the teacher reads off the privileged
+        references. Pass each frame through a pre-trained video-based motion
+        recovery network (GVHMR) and get a 512-dim feature vector that compactly
+        represents the human's pose and short-term motion. Use that as the
+        student's "what should I be doing" signal in place of the future-reference
+        block.
+      </p>
+      <p>
+        If this works, the deployment story becomes simple: a camera watches the
+        operator perform the motion, GVHMR turns frames into features in real
+        time, the student fuses them with its own IMU and joint encoders and
+        decides what to do next. No motion library on the robot.
+      </p>
+    </section>
+
+    <section class="writeup-section">
+      <h2>Pipeline at a glance</h2>
+
+      <div class="writeup-codeblock">
+<pre>Human3.6M video  ──►  GVHMR encoder (offline)  ──►  per-frame 512-dim features
+                                                            │
+H3.6M mocap   ────────────────────────────────────►  motion .pkl
+                                                     (kinematics + img_features)
+                                                            │
+                                                            ▼
+              MotionLib  (loads .pkl, interpolates GVHMR features over time)
+                                       │
+                                       ▼
+                G1MimicDistill env  (obs_type = physhmr_student)
+                                       │
+                                       ▼   obs = [ proprio(74) | img_features(512) ]   →  586
+                                       │
+                ActorCriticVision  (MLP, no motion encoder)
+                                       │
+                                       ▼   23 joint position targets
+                                       │
+                DAgger PPO  (KL to TWIST teacher, BC coef annealed)
+                                       │
+                                       ▼
+                          TorchScript export → MuJoCo / real-robot deploy
+</pre>
+      </div>
+    </section>
+
+    <section class="writeup-section">
+      <h2>Observation space — 586 dims</h2>
+      <p>
+        The first 74 dims are standard locomotion proprioception. The last 512 are
+        GVHMR features from a single future frame.
+      </p>
+
+      <table class="writeup-table">
+        <thead>
+          <tr><th>Slice</th><th>Dim</th><th>Content</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>[  0:  3]</code></td><td>3</td><td>base angular velocity (IMU)</td></tr>
+          <tr><td><code>[  3:  5]</code></td><td>2</td><td>roll, pitch (IMU)</td></tr>
+          <tr><td><code>[  5: 28]</code></td><td>23</td><td><code>dof_pos − default_dof_pos</code></td></tr>
+          <tr><td><code>[ 28: 51]</code></td><td>23</td><td><code>dof_vel</code> (ankle joints 4, 5, 10, 11 zeroed)</td></tr>
+          <tr><td><code>[ 51: 74]</code></td><td>23</td><td>previous action</td></tr>
+          <tr><td><code>[ 74:586]</code></td><td>512</td><td>GVHMR features at <code>t + 1·dt</code> (future look-ahead)</td></tr>
+        </tbody>
+      </table>
+
+      <p>A few small but load-bearing details:</p>
+      <ul style="margin-left:1.2rem; margin-bottom:0.9rem;">
+        <li>
+          <strong>The vision frame is <code>t+1</code>, not <code>t</code>.</strong>
+          History windows of frames were tried and produced "walk in place"
+          behaviour. A single look-ahead frame biases the policy toward forward
+          motion — it sees what the human <em>will</em> be doing one step into the
+          future, not what they're doing now.
+        </li>
+        <li>
+          <strong>Ankle velocities are zeroed</strong> at indices 4, 5, 10, 11.
+          Too noisy to use raw; same convention as the teacher was trained with.
+        </li>
+        <li>
+          <strong>No 6D rotation, no history buffer.</strong> IMU roll/pitch and
+          the GVHMR features carry enough orientation and temporal information
+          on their own.
+        </li>
+        <li>
+          <strong>Proprio noise ramps over training.</strong> The policy first
+          learns the task with clean state, then hardens to sensor noise as
+          training proceeds.
+        </li>
+      </ul>
+    </section>
+
+    <section class="writeup-section">
+      <h2>What the student does not see</h2>
+      <p>
+        The whole point of distillation is restricting the student to things a
+        real robot can measure. The student has no access to:
+      </p>
+      <ul style="margin-left:1.2rem; margin-bottom:0.9rem;">
+        <li>Future motion references — the 1,160-dim mimic observation the teacher uses</li>
+        <li>Ground-truth root velocity or height</li>
+        <li>Body keypoint positions</li>
+        <li>Privileged simulator state (mass, friction, motor strength)</li>
+        <li>Any explicit history buffer</li>
+      </ul>
+    </section>
+
+    <section class="writeup-section">
+      <h2>Architecture</h2>
+
+      <div class="writeup-codeblock">
+<pre>Actor   :  MLP   586 ─► 512 ─► 512 ─► 256 ─► 128 ─► 23
+Critic  :  MLP  1318 ─► 512 ─► 512 ─► 256 ─► 128 ─►  1     (privileged, training-only)
+
+Activation     :  SiLU
+LayerNorm      :  on
+Action std     :  per-joint, learnable
+                  (init: 0.7 legs, 0.4 torso, 0.5 arms)
+</pre>
+      </div>
+
+      <p>
+        A plain MLP — no motion encoder, no recurrence. The GVHMR features
+        themselves already carry temporal context (GVHMR is trained on video
+        clips, not single images), so the policy doesn't need to maintain its
+        own state.
+      </p>
+      <p>
+        The actor is the deployable model. The critic, used only during training,
+        gets the full 1,318-dim privileged observation the teacher had access to
+        — a standard asymmetric actor-critic setup. The critic's value estimate
+        stays well-grounded; the actor learns to produce the same actions from
+        much less information.
+      </p>
+    </section>
+
+    <section class="writeup-section">
+      <h2>Training — DAgger PPO</h2>
+
+      <p>The loss is PPO plus a KL term against the teacher:</p>
+
+      <div class="writeup-codeblock">
+<pre>L  =  L_PPO  +  λ_dagger(t) · KL( π_student(·|o_student) ‖ π_teacher(·|o_teacher_priv) )
+</pre>
+      </div>
+
+      <p>
+        Both policies are queried in lock-step on every rollout step. The teacher
+        reads its full privileged observation; the student reads the 586-dim
+        deployable observation; we penalize divergence between their action
+        distributions. As training progresses the BC weight anneals, handing
+        control back to PPO and the environment reward.
+      </p>
+
+      <table class="writeup-table">
+        <thead>
+          <tr><th>Schedule</th><th>Value</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>DAgger coefficient (BC weight)</td><td>0.1 → 0.01, cosine over 60k steps</td></tr>
+          <tr><td>Action std</td><td>1.0 → 0.4, linear over 4k → 1.5k steps</td></tr>
+          <tr><td>Entropy coefficient</td><td>5e-3</td></tr>
+          <tr><td>Warm iterations (teacher-only)</td><td>100</td></tr>
+          <tr><td>Parallel environments</td><td>2,048</td></tr>
+        </tbody>
+      </table>
+
+      <p>
+        The first 100 iterations roll out the teacher alone to seed on-policy
+        data. After that the student takes over, with the KL term keeping its
+        action distribution close to the teacher's during the early phase when
+        its policy is still mostly noise.
+      </p>
+    </section>
+
+    <section class="writeup-section">
+      <h2>Reward retuning</h2>
+      <p>
+        The student inherits the teacher's motion-tracking reward, but two terms
+        had to be retuned hard because of what the student can no longer see:
+      </p>
+
+      <h3>Root velocity weight: 1.0 → 15.0</h3>
+      <p>
+        Without future root-position references, the policy will happily satisfy
+        most of the tracking reward by walking in place. Aggressively rewarding
+        forward velocity forces the policy to actually translate.
+      </p>
+
+      <h3>Global position rewards: disabled</h3>
+      <p>
+        Position-matching rewards (<code>global_root_xy</code>,
+        <code>global_feet_xy</code>) were tried and turned off. The reference
+        motion lags the simulated robot by a few frames; position matching
+        therefore pulls the robot <em>backward</em>, toward where the reference
+        thinks it should still be. Velocity matching is lag-robust and does the
+        right thing.
+      </p>
+    </section>
+
+    <section class="writeup-section">
+      <h2>Dataset — Human3.6M + GVHMR</h2>
+      <p>
+        611 motion sequences from H3.6M, S01–S11 actors across roughly nine
+        actions each and multiple camera views. Each motion <code>.pkl</code>
+        carries the standard arrays (root pose, joint angles, frame rate) plus
+        an <code>img_features</code> array of shape <code>(num_frames, 512)</code>
+        — GVHMR features extracted offline from the matching camera-view video.
+      </p>
+      <p>
+        The motion library was extended to load and interpolate these features
+        on the fly. The motion runs at H3.6M's native frame rate; the controller
+        runs at 50 Hz. At every query, the library linearly interpolates between
+        the two adjacent feature vectors so the vision input stays temporally
+        aligned with the kinematic motion at non-integer timestamps.
+      </p>
+    </section>
+
+    <section class="writeup-section">
+      <h2>Deployment</h2>
+
+      <h3>TorchScript export</h3>
+      <p>
+        After training, the actor exports to TorchScript — actor only, no
+        critic, no motion encoder. The export script auto-detects the policy
+        class and infers observation / action dimensions directly from the
+        loaded checkpoint, so the same script handles both the old
+        motion-encoder student and the new vision-only one.
+      </p>
+
+      <h3>MuJoCo verification</h3>
+      <p>
+        A separate MuJoCo harness loads the exported policy and runs it against
+        a stripped-down motion library that does not depend on IsaacGym (working
+        around the well-known "PyTorch imported before IsaacGym" import-order
+        failure). The observation builder mirrors the training-time one exactly:
+      </p>
+
+      <div class="writeup-codeblock">
+<pre>obs[  0:  3]  =  base_ang_vel * 0.25
+obs[  3:  5]  =  roll, pitch                    (from base_quat → euler)
+obs[  5: 28]  = (dof_pos − default_dof_pos)
+obs[ 28: 51]  =  dof_vel * 0.05                 (ankle joints zeroed)
+obs[ 51: 74]  =  last_action
+obs[ 74:586]  =  motion_lib.get_image_features(motion_id, motion_time)
+</pre>
+      </div>
+
+      <h3>Real robot</h3>
+      <p>
+        Three things have to come together on hardware:
+      </p>
+      <ol style="margin-left:1.2rem; margin-bottom:0.9rem;">
+        <li>
+          <strong>GVHMR running in real time</strong> at ≥50 Hz on an
+          operator-view camera, emitting 512-dim features per frame. Currently
+          the bottleneck.
+        </li>
+        <li>
+          <strong>IMU + encoder packing</strong> matching the training-time
+          layout. The existing teacher-deployment machinery already does this
+          and can be reused as-is.
+        </li>
+        <li>
+          <strong>A 50 Hz control loop</strong> fusing the two streams and
+          shipping joint targets to the motors.
+        </li>
+      </ol>
+    </section>
+
+    <section class="writeup-section">
+      <h2>Design decisions worth calling out</h2>
+      <ol style="margin-left:1.2rem; margin-bottom:0.9rem;">
+        <li>
+          <strong>One future frame, not a history window.</strong> Vision
+          history under-translates; a single look-ahead frame encodes forward
+          intent and keeps the observation small.
+        </li>
+        <li>
+          <strong>No 6D rotation observation.</strong> An early plan included
+          one. IMU roll/pitch turned out to be sufficient. The 6D rotation
+          helper still lives in the codebase but is unused.
+        </li>
+        <li>
+          <strong>Asymmetric actor-critic.</strong> Critic keeps the full
+          privileged observation throughout training; only the actor is
+          constrained to deployable inputs. Standard for sim-to-real, and it
+          keeps value estimates well-grounded under the impoverished student
+          input.
+        </li>
+        <li>
+          <strong>Velocity matching, no global position.</strong> The dominant
+          reward signal for forward motion. Global position rewards are
+          actively harmful given the reference-vs-sim timing lag.
+        </li>
+        <li>
+          <strong>Pure MLP, no recurrence.</strong> GVHMR features already
+          encode a clip, so the policy doesn't need to maintain temporal state
+          of its own.
+        </li>
+      </ol>
+    </section>
+
+    <section class="writeup-section">
+      <h2>Status</h2>
+
+      <p><strong>Built:</strong></p>
+      <ul style="margin-left:1.2rem; margin-bottom:0.9rem;">
+        <li>Environment, observation builder, training config</li>
+        <li>Motion library extension that loads and interpolates GVHMR features</li>
+        <li><code>ActorCriticVision</code> policy class + DAgger training pipeline</li>
+        <li>TorchScript export script with policy-class auto-detection</li>
+        <li>MuJoCo verification harness, IsaacGym-free</li>
+      </ul>
+
+      <p><strong>Open:</strong></p>
+      <ul style="margin-left:1.2rem; margin-bottom:0.9rem;">
+        <li>Full training run + checkpoint to commit to</li>
+        <li>Quantitative eval vs. the teacher — tracking error, survival, drift</li>
+        <li>Live GVHMR pipeline on the real robot</li>
+        <li>Domain-randomization ablation for the vision-only policy</li>
+      </ul>
+    </section>
+
+    <section class="writeup-section">
+      <h2>References</h2>
+      <ul style="margin-left:1.2rem; margin-bottom:0.9rem;">
+        <li>
+          <a class="writeup-link-arrow" href="https://arxiv.org/abs/2510.02566">PhysHMR<span class="writeup-arrow">↗</span></a> — the design inspiration
+        </li>
+        <li>GVHMR — the vision encoder</li>
+        <li>TWIST — the privileged teacher policy</li>
+        <li>Ross et al., DAgger</li>
+        <li>Human3.6M — the source dataset</li>
+      </ul>
+    </section>
+
+    <section class="writeup-section">
+      <h2>Code</h2>
+      <p style="color: var(--color-text-secondary);">
+        Code release coming once the training run is finalized and the real-robot
+        pipeline is end-to-end.
+      </p>
+    </section>
+
+    <a href="../index.html#projects" class="writeup-back writeup-back-bottom">← back to projects</a>
+  </article>
+
+</body>
+</html>
