@@ -145,24 +145,8 @@ a:hover, a:focus {
 .profile-section {
   display: flex;
   gap: var(--space-lg);
-  align-items: flex-start;
-}
-
-.profile-info {
-  flex: 1;
-}
-
-.profile-info h1 {
-  font-size: 2rem;
-  font-weight: 600;
-  margin-bottom: var(--space-md);
-  letter-spacing: -0.02em;
-}
-
-.bio {
-  color: var(--color-text);
-  margin-bottom: var(--space-sm);
-  font-size: 0.95rem;
+  align-items: center;
+  margin-bottom: var(--space-lg);
 }
 
 .profile-image {
@@ -172,8 +156,45 @@ a:hover, a:focus {
 .profile-image img {
   width: 180px;
   height: 180px;
-  border-radius: 50%;
+  border-radius: 12px;
   object-fit: cover;
+}
+
+.profile-meta {
+  flex: 1;
+  min-width: 0;
+}
+
+.profile-meta h1 {
+  font-size: 2rem;
+  font-weight: 600;
+  margin-bottom: 0.4rem;
+  letter-spacing: -0.02em;
+}
+
+.profile-location {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.92rem;
+  color: var(--color-text-secondary);
+  margin: 0;
+}
+
+.profile-location svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.bio-block {
+  max-width: 720px;
+}
+
+.bio {
+  color: var(--color-text);
+  margin-bottom: var(--space-sm);
+  font-size: 0.95rem;
 }
 
 /* Research Tags */
@@ -215,16 +236,47 @@ a:hover, a:focus {
   border-radius: 0;
 }
 
-/* Navigation Links */
-.nav-links {
-  margin-top: var(--space-md);
-  font-size: 0.95rem;
+/* Social Chips */
+.social-links {
+  margin-top: var(--space-sm);
+  margin-bottom: var(--space-md);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
 }
 
-.nav-links a {
-  display: inline-block;
+.social-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.42rem 0.85rem 0.42rem 0.7rem;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background-color: #ffffff;
+  font-size: 0.88rem;
+  font-weight: 500;
+  color: var(--color-text);
+  text-decoration: none;
+  line-height: 1;
+  transition: background-color 0.18s ease, border-color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
 }
 
+.social-chip:hover {
+  background-color: #fafafa;
+  border-color: #b8b8b8;
+  transform: translateY(-1px);
+  color: var(--color-text);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+}
+
+.social-chip svg {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  display: block;
+}
+
+/* Keep separator class for use elsewhere (e.g. project links) */
 .separator {
   color: var(--color-text-secondary);
   margin: 0 0.4rem;
@@ -264,6 +316,142 @@ a:hover, a:focus {
 
 .news-list .date::after {
   content: " —";
+}
+
+/* Experience Section */
+.experience-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.experience-item {
+  display: flex;
+  gap: var(--space-md);
+  align-items: flex-start;
+  padding: var(--space-sm);
+  margin: calc(-1 * var(--space-sm));
+  border-radius: 8px;
+  transition: background-color 0.2s ease;
+}
+
+.experience-item:hover {
+  background-color: rgba(0, 0, 0, 0.02);
+}
+
+.experience-logo {
+  flex-shrink: 0;
+  width: 96px;
+  height: 96px;
+  border-radius: 10px;
+  border: 1px solid var(--color-border);
+  background-color: #fafafa;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  position: relative;
+}
+
+.experience-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  padding: 10px;
+}
+
+.experience-logo-fallback {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--color-text-secondary);
+}
+
+.experience-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.experience-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  margin-bottom: 0.15rem;
+  flex-wrap: wrap;
+}
+
+.experience-org {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.experience-org a {
+  color: var(--color-text);
+  text-decoration: none;
+  transition: color 0.18s ease;
+}
+
+.experience-org a::after {
+  content: '↗';
+  display: inline-block;
+  margin-left: 0.18em;
+  font-size: 0.78em;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  transition: transform 0.18s ease, color 0.18s ease;
+  transform: translate(0, -0.05em);
+}
+
+.experience-org a:hover {
+  color: var(--color-text);
+}
+
+.experience-org a:hover::after {
+  color: var(--color-text);
+  transform: translate(0.15em, -0.18em);
+}
+
+.bio a,
+.experience-desc a {
+  color: var(--color-text);
+  text-decoration: underline;
+  text-decoration-color: #cfcfcf;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  transition: text-decoration-color 0.18s ease;
+}
+
+.bio a:hover,
+.experience-desc a:hover {
+  color: var(--color-text);
+  text-decoration-color: var(--color-text);
+}
+
+.experience-date {
+  font-size: 0.85rem;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+.experience-role {
+  font-size: 0.92rem;
+  color: var(--color-text-secondary);
+  margin-bottom: 0.35rem;
+}
+
+.experience-desc {
+  font-size: 0.9rem;
+  color: var(--color-text-secondary);
+  line-height: 1.55;
+  margin: 0;
 }
 
 /* Projects Grid */
@@ -328,10 +516,37 @@ a:hover, a:focus {
 
 .project-links {
   font-size: 0.9rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.15rem 1rem;
+  align-items: baseline;
+}
+
+.project-links a {
+  color: var(--color-text);
+  text-decoration: none;
+  font-weight: 500;
+  transition: color 0.18s ease;
+}
+
+.project-links a::after {
+  content: '↗';
+  display: inline-block;
+  margin-left: 0.18em;
+  font-size: 0.82em;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  transition: transform 0.18s ease, color 0.18s ease;
+  transform: translate(0, -0.05em);
+}
+
+.project-links a:hover::after {
+  color: var(--color-text);
+  transform: translate(0.15em, -0.18em);
 }
 
 .project-links .separator {
-  margin: 0 0.3rem;
+  display: none;
 }
 
 /* Footer */
@@ -376,7 +591,7 @@ a:hover, a:focus {
   }
 
   .profile-section {
-    flex-direction: column-reverse;
+    flex-direction: column;
     align-items: center;
     text-align: center;
   }
@@ -386,8 +601,12 @@ a:hover, a:focus {
     height: 140px;
   }
 
-  .profile-info h1 {
+  .profile-meta h1 {
     font-size: 1.75rem;
+  }
+
+  .social-links {
+    justify-content: center;
   }
 
   .nav-links {
