@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Vision-Based Pose Estimation with AprilTags — Abhimanyu Suthar</title>
+  <meta name="description" content="Recovering 6-DOF pose of a nano-quadrotor from monocular images using AprilTag fiducials — detection, pose recovery from PnP, and the noise that mattered most.">
+  <link rel="shortcut icon" href="../images/favicon/favicon.ico" type="image/x-icon">
+  <link rel="stylesheet" href="../stylesheet.css">
+</head>
+<body>
+
+  <nav class="top-nav">
+    <div class="top-nav-inner">
+      <a href="../index.html" class="nav-name">Abhimanyu Suthar</a>
+      <div class="nav-sections">
+        <a href="../index.html#experience">Experience</a>
+        <a href="../index.html#projects">Projects</a>
+      </div>
+    </div>
+  </nav>
+
+  <article class="writeup">
+
+    <a href="../index.html#projects" class="writeup-back">← back to projects</a>
+
+    <header class="writeup-header">
+      <h1 class="writeup-title">Vision-Based Pose Estimation with AprilTags</h1>
+      <p class="writeup-subtitle">
+        Recovering 6-DOF pose of a nano-quadrotor from a single monocular camera using
+        AprilTag fiducials. The CV part is short; the calibration and filtering are
+        where the real work lives.
+      </p>
+
+      <div class="writeup-meta">
+        <span class="writeup-meta-item">2024</span>
+        <span class="writeup-meta-dot">·</span>
+        <span class="writeup-meta-item">Computer Vision &nbsp;·&nbsp; MATLAB &nbsp;·&nbsp; NYU</span>
+        <span class="writeup-meta-dot">·</span>
+        <a class="writeup-meta-link" href="https://drive.google.com/file/d/1Y9TBH7jiizImRM7zNUWt_cCTlqWkVgy1/view?usp=sharing">Paper</a>
+        <span class="writeup-meta-dot">·</span>
+        <a class="writeup-meta-link" href="https://github.com/Abhimanyu-0/Vision_Pose_estimator_">GitHub</a>
+      </div>
+    </header>
+
+    <figure class="writeup-hero">
+      <img src="../project_pic.jpg" alt="Quadrotor pose visualisation with detected AprilTag corners">
+      <figcaption>Estimated quadrotor pose overlaid on the workspace, with detected tag corners and reprojected axes.</figcaption>
+    </figure>
+
+    <section class="writeup-section">
+      <p class="writeup-lede">
+        The goal: estimate the position and orientation of a small quadrotor flying
+        over a workspace, from a single overhead camera, in real time. The setup uses
+        a grid of AprilTag fiducial markers laid out in known world coordinates — the
+        tags are how the system bootstraps from "pixels in an image" to "where the
+        robot is in 3D."
+      </p>
+    </section>
+
+    <section class="writeup-section">
+      <h2>Why AprilTags</h2>
+      <p>
+        Indoor environments don't have GPS. Motion capture rigs work beautifully but
+        cost more than the robot. AprilTags hit the sweet spot — they're a square
+        printed pattern with a unique ID encoded in the inner bits, designed to be
+        detected robustly under lighting variation, perspective distortion, and
+        partial occlusion. You print them, glue them to a surface, and any camera that
+        sees one knows where it is relative to the tag.
+      </p>
+      <p>
+        For pose estimation, AprilTags have a key property: the four corners of the
+        square are precisely localisable to sub-pixel accuracy. That gives you four
+        well-conditioned point correspondences per detected tag, which is enough to
+        solve for the camera's pose relative to the tag.
+      </p>
+    </section>
+
+    <section class="writeup-section">
+      <h2>The pipeline</h2>
+
+      <h3>1 — Detect</h3>
+      <p>
+        Each frame goes through adaptive thresholding, quad detection, and decoding.
+        The output is a list of detected tags, each with a unique ID and four
+        sub-pixel corner coordinates in the image. MATLAB's Computer Vision Toolbox
+        wraps this in a clean interface; the implementation under the hood is the
+        standard AprilTag detector.
+      </p>
+
+      <h3>2 — Look up world coordinates</h3>
+      <p>
+        Each tag ID maps to a known position on the workspace, established once at
+        setup time. So a detection of tag <code>id=7</code> tells you the four image
+        points and the four corresponding world points — a 2D ↔ 3D correspondence
+        ready to solve.
+      </p>
+
+      <h3>3 — Recover pose (PnP)</h3>
+      <p>
+        With four correspondences per tag and a calibrated camera (intrinsics
+        <code>K</code>, distortion coefficients), the camera-to-tag transform is a
+        perspective-n-point problem. Solving it gives you the rotation matrix
+        <code>R</code> and translation <code>t</code> from camera to tag:
+      </p>
+
+      <div class="writeup-codeblock">
+<pre>x_image = K · [ R | t ] · x_world
+</pre>
+      </div>
+
+      <p>
+        Invert that transform and you have the camera pose in the tag's frame. Chain
+        through the (known) tag-to-world transform and you have the camera in the
+        world frame — and since the camera is rigidly mounted on the quadrotor, the
+        quadrotor pose too.
+      </p>
+
+      <h3>4 — Fuse multiple tags</h3>
+      <p>
+        When multiple tags are in view simultaneously, each one gives an independent
+        pose estimate. Fusing them — weighted by the tag's distance, detection
+        confidence, and image area — produces a single estimate that's noticeably
+        more stable than any single-tag estimate. Tags far from image center are
+        downweighted (lens distortion errors dominate there).
+      </p>
+    </section>
+
+    <section class="writeup-section">
+      <h2>Calibration</h2>
+      <p>
+        Camera intrinsics aren't optional. The PnP solution depends linearly on
+        <code>K</code>, and a 1% error in focal length translates almost directly
+        into a 1% error in metric pose. The standard checkerboard calibration
+        procedure took care of intrinsics; distortion coefficients (5-parameter
+        Brown-Conrady) corrected the lens curvature.
+      </p>
+      <p>
+        World coordinates of the tag corners come from measuring the tag layout
+        once at setup. The accuracy of pose estimation is bounded by how
+        accurately those world points are known — a millimetre of error in the
+        tag layout shows up directly in the pose estimate.
+      </p>
+    </section>
+
+    <section class="writeup-section">
+      <h2>Filtering</h2>
+      <p>
+        Frame-to-frame pose jitters by a few millimetres / fractions of a degree
+        even with perfect detection — corner noise, image discretisation,
+        nonlinearities in PnP. A simple low-pass filter on position (and SLERP on
+        orientation quaternion) cleans this up at the cost of a small lag.
+      </p>
+      <p>
+        For real flight use, a full Kalman or extended Kalman filter integrating
+        the visual pose with IMU would be the next step. For this project, the
+        low-pass was enough to demonstrate the visual estimate worked.
+      </p>
+    </section>
+
+    <section class="writeup-section">
+      <h2>What worked</h2>
+      <p>
+        Single-tag detection gives a useful pose at ~30 Hz with the camera I used.
+        Multi-tag fusion brings the noise down by roughly a factor of two and is
+        more robust to occlusions and bad detections at frame edges. The bottleneck
+        in metric accuracy ends up being the world-coordinate calibration of the
+        tag layout, not the detection or PnP solution itself.
+      </p>
+    </section>
+
+    <section class="writeup-section">
+      <h2>Code &amp; paper</h2>
+      <p>
+        <a class="writeup-link-arrow" href="https://github.com/Abhimanyu-0/Vision_Pose_estimator_">
+          github.com / Abhimanyu-0 / Vision_Pose_estimator_<span class="writeup-arrow">↗</span>
+        </a>
+      </p>
+      <p>
+        <a class="writeup-link-arrow" href="https://drive.google.com/file/d/1Y9TBH7jiizImRM7zNUWt_cCTlqWkVgy1/view?usp=sharing">
+          Full project report (PDF)<span class="writeup-arrow">↗</span>
+        </a>
+      </p>
+    </section>
+
+    <a href="../index.html#projects" class="writeup-back writeup-back-bottom">← back to projects</a>
+  </article>
+
+</body>
+</html>

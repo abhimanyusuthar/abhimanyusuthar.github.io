@@ -514,6 +514,19 @@ a:hover, a:focus {
   line-height: 1.4;
 }
 
+.project-title-link {
+  color: var(--color-text);
+  text-decoration: none;
+  transition: color 0.18s ease;
+}
+
+.project-title-link:hover {
+  color: var(--color-text);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--color-text-secondary);
+}
+
 .project-links {
   font-size: 0.9rem;
   display: flex;
@@ -566,6 +579,247 @@ a:hover, a:focus {
   font-size: 0.8rem;
   color: var(--color-text-secondary);
 }
+
+/* ─── Project Writeup Page ─────────────────────────────── */
+
+.writeup {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: calc(var(--nav-height) + var(--space-xl)) var(--space-md) var(--space-xl);
+  font-size: 1.02rem;
+  line-height: 1.72;
+}
+
+.writeup-back {
+  display: inline-block;
+  font-size: 0.85rem;
+  color: var(--color-text-secondary);
+  text-decoration: none;
+  margin-bottom: var(--space-lg);
+  transition: color 0.18s ease;
+}
+
+.writeup-back:hover {
+  color: var(--color-text);
+}
+
+.writeup-back-bottom {
+  display: block;
+  margin-top: var(--space-xl);
+  margin-bottom: 0;
+}
+
+.writeup-header {
+  margin-bottom: var(--space-lg);
+}
+
+.writeup-title {
+  font-size: 2.1rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  margin-bottom: var(--space-sm);
+  color: var(--color-text);
+}
+
+.writeup-subtitle {
+  font-size: 1.05rem;
+  color: var(--color-text-secondary);
+  line-height: 1.55;
+  margin-bottom: var(--space-md);
+}
+
+.writeup-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--color-text-secondary);
+  padding-top: var(--space-sm);
+  border-top: 1px solid var(--color-border);
+}
+
+.writeup-meta-dot {
+  opacity: 0.5;
+}
+
+.writeup-meta-link {
+  color: var(--color-text);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+  transition: color 0.18s ease;
+}
+
+.writeup-meta-link:hover {
+  color: var(--color-text);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--color-text-secondary);
+}
+
+.writeup-hero {
+  width: 100%;
+  margin: var(--space-md) 0 var(--space-lg);
+}
+
+.writeup-hero video,
+.writeup-hero img {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: 6px;
+  background-color: #000;
+  filter: brightness(0.82) contrast(0.96);
+}
+
+.writeup-hero figcaption {
+  margin-top: 0.6rem;
+  font-size: 0.82rem;
+  color: var(--color-text-secondary);
+  text-align: center;
+  line-height: 1.5;
+}
+
+.writeup-section {
+  margin-bottom: var(--space-lg);
+}
+
+.writeup-section h2 {
+  font-size: 1.35rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin: var(--space-lg) 0 var(--space-sm);
+  color: var(--color-text);
+}
+
+.writeup-section h3 {
+  font-size: 1.02rem;
+  font-weight: 600;
+  margin: var(--space-md) 0 0.4rem;
+  color: var(--color-text);
+}
+
+.writeup-section p {
+  color: var(--color-text);
+  margin-bottom: 0.9rem;
+}
+
+.writeup-lede {
+  font-size: 1.08rem;
+  line-height: 1.65;
+  color: var(--color-text);
+  padding: var(--space-sm) 0 var(--space-sm) var(--space-md);
+  border-left: 3px solid var(--color-border);
+  background-color: transparent;
+}
+
+/* Writeup links: same arrow-treatment as experience-org */
+.writeup-section p a {
+  color: var(--color-text);
+  text-decoration: underline;
+  text-decoration-color: #cfcfcf;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  transition: text-decoration-color 0.18s ease;
+}
+
+.writeup-section p a:hover {
+  color: var(--color-text);
+  text-decoration-color: var(--color-text);
+}
+
+.writeup-link-arrow {
+  color: var(--color-text);
+  text-decoration: none;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.2em;
+}
+
+.writeup-arrow {
+  font-size: 0.82em;
+  color: var(--color-text-secondary);
+  transition: transform 0.18s ease, color 0.18s ease;
+  display: inline-block;
+  transform: translate(0, -0.05em);
+}
+
+.writeup-link-arrow:hover .writeup-arrow {
+  color: var(--color-text);
+  transform: translate(0.15em, -0.18em);
+}
+
+/* Inline + block code */
+.writeup code,
+.writeup-codeblock pre {
+  font-family: 'JetBrains Mono', 'Menlo', 'Monaco', 'Courier New', monospace;
+}
+
+.writeup code {
+  font-size: 0.88em;
+  background-color: #f4f4f4;
+  padding: 0.12em 0.35em;
+  border-radius: 4px;
+  color: var(--color-text);
+}
+
+.writeup-codeblock {
+  background-color: #f8f8f8;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 1rem 1.15rem;
+  overflow-x: auto;
+  margin: var(--space-sm) 0;
+}
+
+.writeup-codeblock pre {
+  font-size: 0.82rem;
+  line-height: 1.55;
+  color: #333;
+  margin: 0;
+  white-space: pre;
+}
+
+.writeup-codeblock code {
+  background: none;
+  padding: 0;
+  font-size: inherit;
+}
+
+/* Tables */
+.writeup-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: var(--space-sm) 0;
+  font-size: 0.9rem;
+}
+
+.writeup-table th,
+.writeup-table td {
+  text-align: left;
+  padding: 0.55rem 0.8rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.writeup-table thead th {
+  font-weight: 600;
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+  border-bottom: 2px solid var(--color-border);
+}
+
+.writeup-table tbody tr:hover {
+  background-color: #fafafa;
+}
+
+/* Load JetBrains Mono just for writeup code */
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap');
 
 /* Responsive Design */
 @media (max-width: 640px) {

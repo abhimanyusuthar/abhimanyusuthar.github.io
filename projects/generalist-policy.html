@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Generalist Policy Deployment on Unitree G1 — Abhimanyu Suthar</title>
+  <meta name="description" content="Deploying a generalist motion-tracking policy on the Unitree G1 humanoid robot — a ROS2 controller, the observation layout, and the gotchas that took the longest to find.">
+  <link rel="shortcut icon" href="../images/favicon/favicon.ico" type="image/x-icon">
+  <link rel="stylesheet" href="../stylesheet.css">
+</head>
+<body>
+
+  <!-- Top Navigation -->
+  <nav class="top-nav">
+    <div class="top-nav-inner">
+      <a href="../index.html" class="nav-name">Abhimanyu Suthar</a>
+      <div class="nav-sections">
+        <a href="../index.html#experience">Experience</a>
+        <a href="../index.html#projects">Projects</a>
+      </div>
+    </div>
+  </nav>
+
+  <article class="writeup">
+
+    <!-- Back link + meta header -->
+    <a href="../index.html#projects" class="writeup-back">← back to projects</a>
+
+    <header class="writeup-header">
+      <h1 class="writeup-title">Generalist Policy Deployment on Unitree G1</h1>
+      <p class="writeup-subtitle">
+        A ROS2 controller for motion-imitation on a humanoid robot — the observation
+        layout, the deployment pipeline, and the small details that took the longest to find.
+      </p>
+
+      <div class="writeup-meta">
+        <span class="writeup-meta-item">2025</span>
+        <span class="writeup-meta-dot">·</span>
+        <span class="writeup-meta-item">ROS2 &nbsp;·&nbsp; LibTorch &nbsp;·&nbsp; Humanoid Control</span>
+        <span class="writeup-meta-dot">·</span>
+        <a class="writeup-meta-link" href="https://github.com/Abhimanyu-0/motion_tracking_controller/tree/generalist-policy">
+          GitHub
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" width="12" height="12" style="vertical-align:-1px">
+            <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" style="display:none"/>
+            <path d="M14 3h7v7M21 3 10 14M5 5h5M5 5v14h14v-5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </a>
+      </div>
+    </header>
+
+    <!-- Hero video -->
+    <figure class="writeup-hero">
+      <video autoplay loop muted playsinline>
+        <source src="../IMG_2736 3.mov" type="video/mp4">
+      </video>
+      <figcaption>The G1 tracking a reference motion loaded at runtime from a <code>.npz</code> file.</figcaption>
+    </figure>
+
+    <!-- TL;DR -->
+    <section class="writeup-section">
+      <p class="writeup-lede">
+        I extended an existing motion-imitation controller for the Unitree G1 to deploy
+        a <em>generalist</em> policy — one trained to track arbitrary reference motions rather
+        than a single hard-coded one. The hard parts weren't the model swap; they were the
+        observation layout, the frame conventions, and the joint mapping between
+        simulation and hardware.
+      </p>
+    </section>
+
+    <!-- Context -->
+    <section class="writeup-section">
+      <h2>Single-motion policies vs. generalist policies</h2>
+      <p>
+        The original controller runs an ONNX policy whose reference trajectory is baked
+        into the model at training time. It's simple to deploy: feed the current state in,
+        get joint targets out. But it's also one-trick — to switch motions, you swap policies.
+      </p>
+      <p>
+        A generalist policy takes the reference motion as a runtime input. The model is
+        a TorchScript module; the motion is a <code>.npz</code> file containing root pose
+        and joint positions for every frame. You can load any motion at startup and the
+        same policy tracks it. The deployment side has to do a lot more work, though:
+        loading and interpolating the reference, assembling a much larger observation,
+        and keeping the proprioception history correctly buffered.
+      </p>
+    </section>
+
+    <!-- Observation layout -->
+    <section class="writeup-section">
+      <h2>Observation layout</h2>
+      <p>
+        The generalist policy expects a 2,154-dimensional observation. It breaks down as:
+      </p>
+
+      <div class="writeup-codeblock">
+<pre>[   0 :  600 ]  motion_ref   — 20 future frames × 30 dims
+[ 600 :  674 ]  proprio      — angular vel, roll/pitch,
+                              joint pos, joint vel, last action
+[ 674 : 2154 ]  history      — last 20 proprioceptive obs
+</pre>
+      </div>
+
+      <p>
+        The motion reference is a sliding window of 20 future frames — the policy sees
+        slightly into the future so it can plan stance transitions. The proprioception
+        block is the standard locomotion observation. The history block is what makes
+        the policy robust to noise: it sees its own recent state, not just the current
+        instant.
+      </p>
+      <p>
+        Assembling this every control step requires a rolling buffer, careful frame
+        alignment between simulator-trained data and the real IMU, and a motion library
+        that can do SLERP interpolation between sampled frames (the motion file is at
+        30 fps but the controller runs at 500 Hz).
+      </p>
+    </section>
+
+    <!-- Architecture -->
+    <section class="writeup-section">
+      <h2>Architecture</h2>
+      <p>
+        The controller wraps the <code>legged_rl_controllers::RlController</code> base class
+        and adds a parallel path for generalist mode. The two modes share the outer loop;
+        they only diverge in how the observation gets assembled and which inference
+        backend runs.
+      </p>
+
+      <div class="writeup-codeblock">
+<pre>MotionTrackingController (extends RlController)
+├── Single-motion path
+│   ├── MotionOnnxPolicy       — ONNX runtime, timestep input
+│   ├── MotionCommandTerm      — anchor / body tracking
+│   └── ObservationManager     — standard observation assembly
+│
+└── Generalist path
+    ├── TorchPolicy                  — LibTorch JIT inference
+    ├── MotionLibrary                — .npz loading + SLERP interpolation
+    ├── GeneralistMotionReferenceObs — 20 future frames (600 dims)
+    ├── GeneralistProprioceptiveObs  — proprioception (74 dims)
+    └── GeneralistHistoryObs         — rolling history buffer (1480 dims)
+</pre>
+      </div>
+
+      <p>
+        In generalist mode the controller bypasses the <code>ObservationManager</code>
+        entirely — the standard pipeline assumes observation terms that don't exist for
+        this policy. Instead the <code>update()</code> loop assembles the 2,154-dim vector
+        directly, with explicit control over frame ordering and history buffering.
+      </p>
+      <p>
+        The control loop runs at 500 Hz. Policy inference is decimated to 50 Hz (every
+        10 cycles) — running the network every step is unnecessary for tracking, and
+        the inner 500 Hz loop just resends the last computed target. This is the standard
+        approach in real-time RL deployment and it matters a lot for jitter on the motor
+        commands.
+      </p>
+    </section>
+
+    <!-- Gotchas -->
+    <section class="writeup-section">
+      <h2>The four things that took the longest to find</h2>
+
+      <h3>1. The frame transform on angular velocity</h3>
+      <p>
+        <code>getGeneralizedVelocity()</code> returns the angular velocity of the base
+        in the <em>world</em> frame. The policy was trained on IMU data, which is in the
+        <em>body</em> frame. Without rotating it through the inverse base quaternion before
+        the policy sees it, the robot fell over the instant the controller started. It
+        looked exactly like a tuning problem and wasted a full afternoon before the
+        frame mismatch became obvious.
+      </p>
+
+      <div class="writeup-codeblock">
+<pre>ang_vel_body = base_quat.inverse() * ang_vel_world;
+</pre>
+      </div>
+
+      <h3>2. Twenty-nine joints in sim, twenty-three in the policy</h3>
+      <p>
+        The G1 simulation has 29 actuated joints. The training data excluded the six
+        wrist joints — they aren't load-bearing and they confused the policy more than
+        they helped. The policy outputs 23 joint targets; the controller has to expand
+        them back into a 29-DOF command and zero (or hold) the wrists.
+      </p>
+      <p>
+        Wrist joints sit at indices 19–21 (left) and 26–28 (right) in the 29-DOF array.
+        Two helpers — <code>extract23Dofs()</code> and <code>expand23DofsTo29()</code> —
+        handle both directions, called on every observation read and every action write.
+      </p>
+
+      <h3>3. Ankle velocity zeroing</h3>
+      <p>
+        The training pipeline zeroed out ankle joint velocities at indices 4, 5, 10, 11
+        in the 23-DOF joint velocity vector. This was an artifact of how the simulator
+        modeled ankle compliance. The policy learned to expect zeros there. If you feed
+        it the real ankle velocities at deploy time, the gait becomes visibly jittery —
+        not catastrophic, but not the smooth tracking the sim showed either.
+      </p>
+
+      <h3>4. Action processing</h3>
+      <p>
+        The policy outputs raw actions. The deployed pipeline is:
+      </p>
+      <div class="writeup-codeblock">
+<pre>action  →  clip([-10, 10])  →  × 0.5  →  + default_joint_pos
+</pre>
+      </div>
+      <p>
+        Clipping prevents pathological outputs from any one inference step. The 0.5
+        scale matches the action scale used during training. Adding back the default
+        pose gives the policy a useful prior — it learns deltas from a known-stable
+        pose, not absolute joint angles.
+      </p>
+    </section>
+
+    <!-- PD Gains -->
+    <section class="writeup-section">
+      <h2>PD gains</h2>
+      <p>
+        These are set once at startup and held for the full episode. They started from
+        the main-branch values and were reduced 50–70% — the generalist policy is more
+        confident about its targets than the single-motion policy, so the controller
+        doesn't need to fight the policy as hard.
+      </p>
+
+      <table class="writeup-table">
+        <thead>
+          <tr><th>Joint group</th><th>kp</th><th>kd</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Legs (hip / knee)</td><td>100 – 150</td><td>2 – 4</td></tr>
+          <tr><td>Ankles</td><td>40</td><td>2</td></tr>
+          <tr><td>Torso</td><td>150</td><td>4</td></tr>
+          <tr><td>Arms</td><td>40</td><td>6</td></tr>
+          <tr><td>Wrists (passive)</td><td>10</td><td>1</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- Results -->
+    <section class="writeup-section">
+      <h2>What worked</h2>
+      <p>
+        The robot tracks runtime-loaded motions cleanly. Switching motions is now a
+        matter of pointing the launch file at a different <code>.npz</code> instead of
+        retraining a policy. The 50 Hz inference / 500 Hz motor command split keeps the
+        motors smooth without burning compute on redundant network passes.
+      </p>
+      <p>
+        The single-motion path is untouched — both modes coexist in the same controller
+        binary, branching on a single <code>use_generalist</code> launch parameter. This
+        was important: the lab still uses the ONNX path for several existing experiments,
+        and breaking it would have been costly.
+      </p>
+    </section>
+
+    <!-- Code -->
+    <section class="writeup-section">
+      <h2>Code</h2>
+      <p>
+        The full controller is open source:
+      </p>
+      <p>
+        <a class="writeup-link-arrow" href="https://github.com/Abhimanyu-0/motion_tracking_controller/tree/generalist-policy">
+          github.com / Abhimanyu-0 / motion_tracking_controller<span class="writeup-arrow">↗</span>
+        </a>
+      </p>
+      <p>
+        The README in that branch covers build, launch, and motion-file format in detail.
+      </p>
+    </section>
+
+    <a href="../index.html#projects" class="writeup-back writeup-back-bottom">← back to projects</a>
+  </article>
+
+</body>
+</html>

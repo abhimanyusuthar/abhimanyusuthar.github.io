@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Training a Quadrotor to Avoid Obstacles with PPO — Abhimanyu Suthar</title>
+  <meta name="description" content="A custom Gymnasium environment for 2D quadrotor control trained with PPO — environment design, reward shaping, and what made training converge.">
+  <link rel="shortcut icon" href="../images/favicon/favicon.ico" type="image/x-icon">
+  <link rel="stylesheet" href="../stylesheet.css">
+</head>
+<body>
+
+  <nav class="top-nav">
+    <div class="top-nav-inner">
+      <a href="../index.html" class="nav-name">Abhimanyu Suthar</a>
+      <div class="nav-sections">
+        <a href="../index.html#experience">Experience</a>
+        <a href="../index.html#projects">Projects</a>
+      </div>
+    </div>
+  </nav>
+
+  <article class="writeup">
+
+    <a href="../index.html#projects" class="writeup-back">← back to projects</a>
+
+    <header class="writeup-header">
+      <h1 class="writeup-title">Training a Quadrotor to Avoid Obstacles with PPO</h1>
+      <p class="writeup-subtitle">
+        A custom Gymnasium environment for 2D quadrotor control, trained end-to-end
+        with Proximal Policy Optimization. Most of the work was in the reward shaping
+        and the simulator, not the RL algorithm.
+      </p>
+
+      <div class="writeup-meta">
+        <span class="writeup-meta-item">2024</span>
+        <span class="writeup-meta-dot">·</span>
+        <span class="writeup-meta-item">PPO &nbsp;·&nbsp; Gymnasium &nbsp;·&nbsp; NYU</span>
+        <span class="writeup-meta-dot">·</span>
+        <a class="writeup-meta-link" href="https://drive.google.com/file/d/14dI3tmSMuVwbL4iUtIrodfB4yFd_2b_Y/view?usp=sharing">Paper</a>
+        <span class="writeup-meta-dot">·</span>
+        <a class="writeup-meta-link" href="https://github.com/Abhimanyu-0/PPO_quadrotor">GitHub</a>
+      </div>
+    </header>
+
+    <figure class="writeup-hero">
+      <video autoplay loop muted playsinline>
+        <source src="../Abhimanyu_Project_2_video.mp4" type="video/mp4">
+      </video>
+      <figcaption>The trained policy navigating to a target while avoiding obstacles in the 2D world.</figcaption>
+    </figure>
+
+    <section class="writeup-section">
+      <p class="writeup-lede">
+        Goal: a controller that flies a 2D planar quadrotor to a target while avoiding
+        obstacles, learned end-to-end from a reward signal. The challenge was designing
+        a reward that produced the behaviour I wanted without the policy collapsing into
+        any of the obvious local optima (hover forever, ram the wall, ignore the target).
+      </p>
+    </section>
+
+    <section class="writeup-section">
+      <h2>Why PPO, why custom env</h2>
+      <p>
+        Classical controllers work beautifully when you know the trajectory ahead of
+        time, but they're brittle the moment obstacles enter the picture and the path
+        has to be replanned. RL handles that naturally — the policy learns what to do
+        based on the current state, including obstacle positions, without needing a
+        precomputed plan.
+      </p>
+      <p>
+        I picked PPO because it's stable, sample-efficient enough for a 2D problem, and
+        well-supported through Stable-Baselines3. The environment is a custom
+        Gymnasium <code>QuadrotorEnv</code>: writing it from scratch meant I controlled
+        every part of the reward and dynamics, which turned out to matter a lot.
+      </p>
+    </section>
+
+    <section class="writeup-section">
+      <h2>The environment</h2>
+
+      <h3>State and action</h3>
+      <p>
+        The quadrotor is a 6-DOF planar system:
+      </p>
+
+      <div class="writeup-codeblock">
+<pre>state   ∈ ℝ⁶ :  [ pₓ, p_y, vₓ, v_y, θ, ω ]
+action  ∈ ℝ² :  [ u₁, u₂ ]    rotor forces
+</pre>
+      </div>
+
+      <h3>Dynamics</h3>
+      <p>
+        Standard planar quadrotor model. Mass <code>m</code>, moment of inertia
+        <code>I</code>, rotor arm <code>r</code>, gravity <code>g</code>:
+      </p>
+
+      <div class="writeup-codeblock">
+<pre>ṗₓ  =  vₓ
+m·v̇ₓ =  −(u₁ + u₂) sin θ
+
+ṗ_y =  v_y
+m·v̇_y =  (u₁ + u₂) cos θ  −  m·g
+
+θ̇   =  ω
+I·ω̇  =  r·(u₁ − u₂)
+</pre>
+      </div>
+
+      <p>
+        Integration with simple Euler at a small fixed timestep. The pitch torque is
+        the difference of rotor forces; the total thrust is their sum. This means the
+        action space is naturally collinear with the two things the policy needs to
+        modulate — translation force and rotation torque.
+      </p>
+    </section>
+
+    <section class="writeup-section">
+      <h2>Reward shaping</h2>
+      <p>
+        Most of the time on this project went into reward design. The combined reward
+        has four components, all of which had to be balanced against each other before
+        the policy did anything reasonable:
+      </p>
+
+      <ul style="margin-left:1.2rem; margin-bottom:0.9rem;">
+        <li><strong>Target reaching</strong> — exponential decay in distance to target. Sharper than linear, which kept the agent from being satisfied with "kind of close."</li>
+        <li><strong>Obstacle avoidance</strong> — penalty that scales with how close it gets. Hard-margin penalties (large constant on collision) alone don't shape the policy enough; the gradient near the obstacle has to push it away gently.</li>
+        <li><strong>Boundary violation</strong> — terminal-ish penalty for leaving the workspace. Important early in training when the policy outputs wild actions.</li>
+        <li><strong>Control effort</strong> — small quadratic cost on action magnitude. Keeps the trained policy smooth and stops it from saturating the rotors when it doesn't need to.</li>
+      </ul>
+
+      <p>
+        The biggest mistake I made early was using a sparse reward (only on reaching
+        the target). PPO can't escape the no-signal regime if every episode looks the
+        same to the value function. The exponential distance reward fixed that — every
+        step in the right direction gets a positive signal, so the policy has gradient
+        information from step one.
+      </p>
+    </section>
+
+    <section class="writeup-section">
+      <h2>Gravity compensation</h2>
+      <p>
+        One thing that helped a lot: rather than letting the policy learn from zero,
+        I added an action bias equal to the hover thrust. This way the policy outputs
+        deltas around hover rather than absolute thrusts.
+      </p>
+      <p>
+        Without this, the policy spends thousands of episodes just learning that
+        without thrust the quadrotor falls. With it, the policy starts from a stable
+        baseline and the only thing it has to figure out is when to push around that
+        baseline. Convergence time dropped noticeably.
+      </p>
+    </section>
+
+    <section class="writeup-section">
+      <h2>Training</h2>
+
+      <p>
+        PPO via Stable-Baselines3, MLP policy:
+      </p>
+
+      <table class="writeup-table">
+        <thead>
+          <tr><th>Hyperparameter</th><th>Value</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Learning rate</td><td>9e-3</td></tr>
+          <tr><td>Batch size</td><td>32</td></tr>
+          <tr><td>Total training steps</td><td>600,000</td></tr>
+          <tr><td>Entropy coefficient</td><td>1e-2</td></tr>
+        </tbody>
+      </table>
+
+      <p>
+        The learning rate is higher than the usual <code>3e-4</code> default. I
+        ran a small sweep and a more aggressive LR worked because the problem is
+        low-dimensional and the env is fast — wall-clock convergence beat sample
+        efficiency considerations.
+      </p>
+      <p>
+        The entropy coefficient stays at <code>1e-2</code> through training (no
+        decay). This kept enough exploration alive for the policy to discover paths
+        around obstacles instead of memorising one route to one target.
+      </p>
+    </section>
+
+    <section class="writeup-section">
+      <h2>What worked</h2>
+      <p>
+        After ~600k environment steps the policy reliably reaches targets, navigates
+        around obstacles, and produces smooth control inputs. Most of the convergence
+        happens in the first ~200k steps; the rest is fine-tuning.
+      </p>
+      <p>
+        The lessons that transferred to later projects: shape the reward densely,
+        bias the action space around a known-good baseline, and don't trust default
+        hyperparameters when the env is small and fast.
+      </p>
+    </section>
+
+    <section class="writeup-section">
+      <h2>Code &amp; paper</h2>
+      <p>
+        <a class="writeup-link-arrow" href="https://github.com/Abhimanyu-0/PPO_quadrotor">
+          github.com / Abhimanyu-0 / PPO_quadrotor<span class="writeup-arrow">↗</span>
+        </a>
+      </p>
+      <p>
+        <a class="writeup-link-arrow" href="https://drive.google.com/file/d/14dI3tmSMuVwbL4iUtIrodfB4yFd_2b_Y/view?usp=sharing">
+          Full project report (PDF)<span class="writeup-arrow">↗</span>
+        </a>
+      </p>
+      <p style="color: var(--color-text-secondary); font-size: 0.9rem;">
+        Coursework with Prof. Ludovic Righetti and TA Armand Jordana at NYU.
+      </p>
+    </section>
+
+    <a href="../index.html#projects" class="writeup-back writeup-back-bottom">← back to projects</a>
+  </article>
+
+</body>
+</html>
